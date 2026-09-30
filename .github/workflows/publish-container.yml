@@ -1,0 +1,187 @@
+name: Verify and publish container 1.1.0
+
+# Explicit manual release only: normal pushes do not publish images.
+"on":
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-container-1.1.0
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/flamingyouth/aliyun-monitor
+  VERSION: 1.1.0
+
+jobs:
+  verify:
+    name: Verify ${{ matrix.architecture }}
+    if: github.repository == 'FlamingYouth/aliyun-monitor-web' && github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: amd64
+            runner: ubuntu-24.04
+          - architecture: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact release source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Frontend and installer checks
+        run: |
+          node --check static/app.js
+          node tests/frontend.test.js
+          sh -n install.sh
+      - name: Build candidate with repository association
+        env:
+          ARCH: ${{ matrix.architecture }}
+        run: |
+          docker build --platform "linux/$ARCH" \
+            --label org.opencontainers.image.source=https://github.com/FlamingYouth/aliyun-monitor-web \
+            --label org.opencontainers.image.version="$VERSION" \
+            --label org.opencontainers.image.revision="$GITHUB_SHA" \
+            --tag "candidate:$ARCH" .
+      - name: Compare with previously tested image baseline
+        env:
+          ARCH: ${{ matrix.architecture }}
+        run: |
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --mount "type=bind,src=$PWD/scripts,dst=/verification,readonly" \
+            --mount "type=bind,src=$PWD/aliyun-final-image-parity-1.1.0.json,dst=/baseline.json,readonly" \
+            "candidate:$ARCH" python /verification/verify_image.py \
+            --baseline /baseline.json --architecture "$ARCH"
+          docker run --rm --network none --read-only "candidate:$ARCH" python -m pip check
+      - name: Full packaged-image unit and HTTP tests, offline
+        env:
+          ARCH: ${{ matrix.architecture }}
+        run: |
+          for mode in unit http; do
+            args=(python -m unittest discover -s tests -v)
+            if [ "$mode" = http ]; then args=(python -m tests.image_smoke); fi
+            docker run --rm --network none --read-only --cap-drop ALL \
+              --security-opt no-new-privileges:true --memory 512m \
+              --tmpfs /tmp:rw,noexec,nosuid,size=128m \
+              --mount "type=bind,src=$PWD/tests,dst=/app/tests,readonly" \
+              --mount "type=bind,src=$PWD/install.sh,dst=/app/install.sh,readonly" \
+              "candidate:$ARCH" "${args[@]}"
+          done
+      - name: Export only verified candidate
+        env:
+          ARCH: ${{ matrix.architecture }}
+        run: docker save --output "candidate-$ARCH.tar" "candidate:$ARCH"
+      - name: Store verified candidate for publish job
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: candidate-${{ matrix.architecture }}
+          path: candidate-${{ matrix.architecture }}.tar
+          retention-days: 1
+          if-no-files-found: error
+
+  publish:
+    name: Publish verified multi-architecture package
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download verified candidates from this run
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: candidate-*
+          merge-multiple: true
+      - name: Load the exact tested candidates, without rebuilding
+        run: |
+          docker load --input candidate-amd64.tar
+          docker load --input candidate-arm64.tar
+          for arch in amd64 arm64; do
+            actual=$(docker image inspect "candidate:$arch" --format '{{.Architecture}}')
+            test "$actual" = "$arch"
+            source=$(docker image inspect "candidate:$arch" --format '{{index .Config.Labels "org.opencontainers.image.source"}}')
+            test "$source" = https://github.com/FlamingYouth/aliyun-monitor-web
+          done
+      - name: Authenticate with repository-scoped temporary token
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Refuse to overwrite any existing release tags
+        env:
+          PACKAGE_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from urllib.error import HTTPError
+          from urllib.request import Request, urlopen
+
+          base = 'https://api.github.com/users/FlamingYouth/packages/container/aliyun-monitor'
+          headers = {'Authorization': 'Bearer ' + os.environ['PACKAGE_API_TOKEN'],
+                     'Accept': 'application/vnd.github+json',
+                     'X-GitHub-Api-Version': '2022-11-28'}
+          def get(url):
+              with urlopen(Request(url, headers=headers), timeout=30) as response:
+                  return json.load(response)
+
+          try:
+              package = get(base)
+          except HTTPError as error:
+              if error.code != 404:
+                  raise RuntimeError('Package permission check failed: HTTP ' + str(error.code)) from None
+              # A repository-scoped token cannot overwrite an unrelated, hidden package.
+              # Registry authorization still enforces that restriction during the push.
+              print('No existing package accessible to this repository; publishing a new package')
+          else:
+              if (package.get('repository') or {}).get('full_name') != 'FlamingYouth/aliyun-monitor-web':
+                  raise RuntimeError('Existing package is not associated with this repository')
+              version = os.environ['VERSION']
+              reserved = {version, version + '-amd64', version + '-arm64'}
+              for page in range(1, 101):
+                  items = get(base + '/versions?per_page=100&page=' + str(page))
+                  for item in items:
+                      tags = item.get('metadata', {}).get('container', {}).get('tags', [])
+                      if reserved.intersection(tags):
+                          raise RuntimeError('Release tag already exists; refusing overwrite')
+                  if len(items) < 100:
+                      break
+              else:
+                  raise RuntimeError('Package version inventory incomplete; refusing publish')
+          PY
+      - name: Publish both verified architectures and shared version tag
+        run: |
+          for arch in amd64 arm64; do
+            docker tag "candidate:$arch" "$IMAGE:$VERSION-$arch"
+            docker push "$IMAGE:$VERSION-$arch"
+          done
+          docker manifest create "$IMAGE:$VERSION" "$IMAGE:$VERSION-amd64" "$IMAGE:$VERSION-arm64"
+          docker manifest push "$IMAGE:$VERSION"
+      - name: Verify published manifest
+        run: |
+          docker manifest inspect "$IMAGE:$VERSION" > published-manifest.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          manifest = json.loads(Path('published-manifest.json').read_text())
+          platforms = [(item['platform']['os'], item['platform']['architecture'])
+                       for item in manifest['manifests']]
+          assert sorted(platforms) == [('linux', 'amd64'), ('linux', 'arm64')], platforms
+          print('Published multi-architecture manifest verified:', platforms)
+          PY
+          {
+            echo '## Published verified 1.1.0 container'
+            echo "Image: \`$IMAGE:$VERSION\`"
+            echo 'Architectures: linux/amd64 and linux/arm64'
+            echo 'Both candidates passed baseline, unit, frontend and HTTP checks before any push.'
+            echo 'No private configuration, credentials or data volumes were used.'
+            echo 'New GHCR packages default to private; the owner must make the package public for anonymous pulls.'
+          } >> "$GITHUB_STEP_SUMMARY"

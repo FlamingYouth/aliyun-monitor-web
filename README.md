@@ -180,3 +180,13 @@ docker run --rm --network none --tmpfs /tmp:rw,size=128m \
 上传 Docker Hub 时把对应镜像重新标记到你自己的仓库再推送；此交付没有替你登录或上传。服务器使用匹配架构的镜像，保留原数据卷、端口和安全参数。不要同时启动两个监控容器共享同一数据卷。
 
 升级前下载完整备份，停用旧容器；先设为只监控再启动新版。管理员与原配置不需要重新创建，新增抢占恢复选项默认关闭。若要回退镜像，务必保持只监控，确认数据兼容性后再重新启用自动控制。
+
+## 十一、GitHub Packages 发布
+
+仓库新增手动发布流程 `Verify and publish container 1.1.0`，目标为 `ghcr.io/flamingyouth/aliyun-monitor:1.1.0`。它不在普通代码提交时自动运行，也不需要保存个人 Token。只在发布阶段使用仓库临时 `GITHUB_TOKEN` 的 Packages 写入权限。
+
+发布前分别在原生 AMD64、ARM64 环境构建候选镜像：11 个应用文件、20 个依赖版本及 Python 版本必须与已有 1.1.0 测试基线一致；两版均通过完整单元测试、前端回归和镜像内真实 HTTP 测试，才发布已测试的候选镜像，不在发布阶段重新构建。测试只使用虚构数据且断网，不使用实际账号、Webhook、管理员配置或运行数据卷。已有版本标签不会被覆盖。
+
+公共版本统一使用 `1.1.0` 标签，Docker 根据机器架构选择 AMD64 或 ARM64；也保留 `1.1.0-amd64`、`1.1.0-arm64` 标签。通过镜像 source 标签关联本仓库，使包显示在右侧 Packages。新包默认为私有，拥有者需要在 Package settings 中改为 Public，其他人才能免登录拉取；公开后不能改回私有。[GitHub 官方说明](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility)
+
+此流程不操作阿里云镜像仓库，不修改任何正在运行的容器或部署配置。已有阿里云镜像地址继续有效；切换镜像源并非必需，已有部署不需要重新初始化或更换数据卷。后续应用版本变化时，需要重新完成对应版本验收并建立新基线，不能复用 1.1.0 的校验结果。
