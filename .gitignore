@@ -1,0 +1,39 @@
+# Private deployment configuration and credentials
+.env
+.env.*
+!.env.example
+config.json
+secret.key
+setup.token
+*.pem
+*.key
+.aws/
+.codex/
+.agents/
+
+# Runtime databases, logs, and sensitive backups
+data/
+backups/
+before-restore/
+before-upgrade-*/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.log
+*.zip
+*.tar.gz
+*.tgz
+
+# Local caches and test outputs
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+test-results/
+node_modules/
+.DS_Store

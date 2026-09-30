@@ -1,0 +1,56 @@
+{
+  "version": "1.1.0",
+  "application_files_equal": true,
+  "dependencies_equal": true,
+  "python_equal": true,
+  "runtime_config_equal": true,
+  "images": [
+    {
+      "tag": "codex-aliyun-monitor-final-arm64:1.1.0",
+      "id": "sha256:83daf6a572b4b327660c20dc3edc5fc8a67c8fbc89787e0a2368a72054819b45",
+      "architecture": "arm64",
+      "python": "3.12.14"
+    },
+    {
+      "tag": "codex-aliyun-monitor-final-amd64:1.1.0",
+      "id": "sha256:570c3f643477328b0b8efe3efc20e2caa94b100a9e48f964d78df539a12d818e",
+      "architecture": "amd64",
+      "python": "3.12.14"
+    }
+  ],
+  "files": {
+    "admin_reset.py": "addc62ccbd8326db6eaff367e620040e36a4d7d8d59704abe9ed2ba8666e46cc",
+    "app.py": "6a1367e71e89202bb44d0ce511378a11aab28c866eb879b056d1a506f3ef58d0",
+    "cloud.py": "fc564e2e9ec2cd4000a2105835e120412308e9665489379e83fd54705e2e141b",
+    "engine.py": "da9fe0d460b79cde03d8798f513ef13afda02b3369094bf0f1f41206349c41e1",
+    "notify.py": "a6ebc786c3a75d7fa0c0d3f0e80962ec0e887019a7242a3fcb766cf449238c80",
+    "requirements.txt": "88add395be66464f255d48749d4210df82afdbe0d041af2489225225c5c56619",
+    "static/app.js": "a7525184cada08e47b4404d9e6d53a8e9475f4989c8aa1dacef7dcdea9cbcd9e",
+    "static/extras.css": "db8a5d9273634046c6c78f9f159430c6cd4954a8cf6eba6810bc8d456b843a3f",
+    "static/index.html": "2313348df1d1bc2784a2b819aaf2ee1c228ae864e0a45f6117a40f2bf34f63b1",
+    "static/style.css": "d3b146f2d13a73c20cff0412ace44ee59736462e25d87bf0e27ec836cdba09aa",
+    "store.py": "95a072167eb36c8d65beb98d985c2fcdb342ce6c7f516468053bff2dd1bc0489"
+  },
+  "packages": {
+    "pip": "25.0.1",
+    "cffi": "2.1.1",
+    "idna": "3.20",
+    "certifi": "2026.7.22",
+    "charset-normalizer": "3.5.2",
+    "MarkupSafe": "3.0.3",
+    "jmespath": "1.1.0",
+    "urllib3": "2.8.0",
+    "cryptography": "45.0.7",
+    "itsdangerous": "2.2.0",
+    "Werkzeug": "3.1.9",
+    "click": "8.5.0",
+    "packaging": "26.3",
+    "requests": "2.32.5",
+    "gunicorn": "23.0.0",
+    "pycparser": "3.0",
+    "Jinja2": "3.1.6",
+    "Flask": "3.1.2",
+    "aliyun-python-sdk-core": "2.16.1",
+    "blinker": "1.9.0"
+  }
+}

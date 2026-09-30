@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f766e">
+  <title>云巡 · 阿里云监控</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/extras.css">
+  <script defer src="/static/app.js"></script>
+</head>
+<body>
+  <div id="loading" class="loading"><div class="brand-mark">云</div><p>正在连接云巡…</p></div>
+  <div id="app" class="shell" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="#dashboard"><span class="brand-mark">云</span><span>云巡<small>ALIYUN MONITOR</small></span></a>
+      <div class="workspace-label">监控工作台</div>
+      <nav id="navigation" aria-label="主导航"></nav>
+      <div class="sidebar-bottom"><div class="live-dot"></div><span>本地部署 · 数据由你掌控<small id="sidebar-version">版本 1.0.0</small></span></div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar"><div><button id="mobile-menu" class="icon-button" aria-label="展开导航">☰</button><span class="crumb">工作空间 <span>/</span> <b id="page-label">总览</b></span></div><div class="topbar-right"><span id="clock" class="muted"></span><button class="user-pill" data-action="security"><span class="avatar">管</span><span id="user-label">管理员</span></button><button class="icon-button" data-action="logout" aria-label="退出登录">↪</button></div></header>
+      <main id="main"></main>
+      <footer>云巡 · 阿里云 CDT 监控 <span>每一次决策，都有记录。</span></footer>
+    </div>
+  </div>
+  <div id="onboarding" class="onboarding" hidden></div>
+  <dialog id="modal"><div id="modal-content"></div></dialog>
+  <div id="toasts" role="status" aria-live="polite"></div>
+</body>
+</html>

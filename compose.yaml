@@ -1,0 +1,25 @@
+version: '3.7'
+services:
+  monitor:
+    image: aliyun-monitor-web:1.1.0
+    build: .
+    container_name: aliyun-monitor-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8088}:8080"
+    environment:
+      SETUP_TOKEN: "${SETUP_TOKEN}"
+      TRUST_PROXY: "${TRUST_PROXY:-0}"
+    volumes:
+      - aliyun-monitor-web-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+volumes:
+  aliyun-monitor-web-data:
+    external: true
