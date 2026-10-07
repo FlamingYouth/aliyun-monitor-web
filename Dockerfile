@@ -1,4 +1,5 @@
 FROM python:3.12-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e
+LABEL org.opencontainers.image.version="1.2.0"
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 DATA_DIR=/data TZ=Asia/Shanghai
 WORKDIR /app
 COPY requirements.txt ./
@@ -6,6 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && useradd --uid 10001 --create-home monitor \
     && mkdir /data && chown monitor:monitor /data
 COPY app.py cloud.py engine.py notify.py store.py admin_reset.py ./
+COPY notification-config.json ./
 COPY static/ ./static/
 USER 10001:10001
 EXPOSE 8080

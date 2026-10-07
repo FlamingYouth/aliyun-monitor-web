@@ -3,3 +3,62 @@ progress{display:block;height:5px;width:135px;max-width:100%;border:0;border-rad
 .status-banner>svg{width:21px;height:21px;flex:0 0 21px;color:#267460}.status-banner>span{display:block!important;font-size:12px;flex:1}.status-banner.warning{background:#fff5e7;border-color:#f1dfbe}.status-banner.warning b{color:#a96810}.wizard-progress span{flex:0 0 27px;width:27px;height:27px;display:flex;align-items:center;justify-content:center;border-radius:50%;font-size:11px;background:#edf2f3;color:#8e9ba5}.wizard-progress span.active{background:#0e887d;color:#fff}.wizard-progress span.complete{background:#e3f5ef;color:#0e887d}.wizard-progress .bar{height:2px;flex:1;background:#e7edef}.logs .log-item{display:grid;grid-template-columns:60px 1fr}.log-item small{display:block;margin-top:5px;color:var(--muted);font-size:11px}.log-item b{font-weight:500}.traffic-chart{display:block}.stats-grid .stat-value{font-size:27px}
 .button{white-space:nowrap}.section-bottom{flex-wrap:wrap;gap:12px}.section-bottom>.button{flex-shrink:0}.section-bottom .muted{flex:1;min-width:200px}.chart-meta{padding:0 24px}.setting-stack{display:grid;gap:20px}.grid-2+.setting-section{margin-top:20px}
 .power-row{flex-wrap:wrap;min-width:240px;max-width:280px;gap:6px}.power-row .button{font-size:12px}.modal-body .note{line-height:1.9}
+
+/* Charts have their own space; their labels no longer consume the SVG height. */
+.dashboard-middle{grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch}
+.dashboard-middle .account-summary{grid-column:1/-1}
+.account-summary .card-body{display:flex;flex-wrap:wrap;gap:0 32px}
+.account-overview{flex:1 1 280px;min-width:0;padding:8px 0 18px}
+.account-overview-name{display:flex;align-items:center;gap:10px}
+.account-overview-name small,.account-overview-metrics small{color:var(--muted);font-size:11px}
+.account-overview-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
+.account-overview-metrics small{display:block;margin-bottom:4px}
+.account-overview-metrics b{font-size:16px;overflow-wrap:anywhere}
+.account-summary .note{width:100%;margin-bottom:0}
+.chart-area{position:relative;height:auto;margin:0;padding:0 20px 18px;min-width:0}
+.chart-area .data-chart{display:block;width:100%;height:auto;aspect-ratio:auto}
+.chart-scroll{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain}
+.chart-scroll .data-chart{width:auto;min-width:100%;max-width:none;height:248px}
+.chart-item{cursor:crosshair;outline:none}
+.chart-dot,.chart-bar,.chart-value,.chart-day{pointer-events:none}
+.chart-value{fill:#344f60;font-size:11px;font-weight:600}
+.chart-day{fill:#82919e;font-size:12px}
+.chart-item:hover .chart-dot,.chart-item:focus .chart-dot{r:6;stroke:#fff;stroke-width:2;filter:drop-shadow(0 1px 3px #0e887d66)}
+.chart-item:hover .chart-bar,.chart-item:focus .chart-bar{filter:brightness(.8);stroke:#344f60;stroke-width:1}
+.chart-tooltip{position:absolute;top:57px;right:20px;z-index:3;max-width:calc(100% - 40px);padding:9px 13px;border-radius:8px;background:#172d38;color:#fff;font-size:12px;line-height:1.65;white-space:pre-line;box-shadow:0 4px 14px #172d3826;pointer-events:none}
+.chart-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:42px;margin-bottom:12px}
+.chart-toolbar>b,.chart-total b{font-size:16px;white-space:nowrap}
+.chart-total{text-align:right;white-space:nowrap}
+.chart-total small{display:block;color:var(--muted);font-size:10px;margin-bottom:2px}
+.chart-picker{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;min-width:0}
+.chart-picker select{max-width:190px;min-width:0;padding:5px 9px;border:1px solid var(--line);border-radius:7px;color:var(--ink);background:white}
+.chart-note{color:var(--muted);font-size:11px;margin:8px 0 0;overflow-wrap:anywhere}
+.chart-empty{height:220px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:4px;text-align:center;padding:20px}
+.chart-empty span{max-width:100%;overflow-wrap:anywhere}
+.notification-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+.notification-card{padding:24px;display:flex;flex-direction:column;border-radius:14px}
+.notification-card.enabled{border-color:#b5ddd4}
+.notification-card-head{display:flex;align-items:center;gap:12px}
+.notification-card-head h3{margin:0;font-size:16px}
+.notification-card-head p{margin:3px 0 0;font-size:11px}
+.notification-icon{flex-shrink:0;width:40px;height:40px;display:grid;place-items:center;background:#e8f6f1;color:#0e887d;border-radius:10px;font-size:19px;font-weight:700}
+.notification-icon.telegram{background:#e8f2ff;color:#438acc}
+.notification-icon.bark{background:#fff2e5;color:#b77c39}
+.notification-card-info{margin:22px 0;font-size:12px;flex:1;overflow-wrap:anywhere}
+.notification-card-info>.muted{font-size:11px;margin-left:8px}
+.notification-card-info p{margin:12px 0 0;color:#72838f}
+.notification-card-footer{display:flex;justify-content:flex-end;padding-top:14px;border-top:1px solid var(--line)}
+.channel-switch{margin-left:auto;position:relative;display:inline-flex;width:38px;height:22px;flex:0 0 38px}
+.channel-switch input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;z-index:1}
+.channel-switch span{display:block;width:38px;height:22px;background:#cbd5db;border-radius:20px;transition:background .15s}
+.channel-switch span:after{content:'';display:block;width:16px;height:16px;margin:3px;border-radius:50%;background:white;transition:transform .15s}
+.channel-switch input:checked+span{background:#0e887d}
+.channel-switch input:checked+span:after{transform:translateX(16px)}
+.channel-switch input:focus-visible+span{outline:3px solid #7ac8f2;outline-offset:3px}
+.channel-switch input:disabled+span{opacity:.5}
+.report-archive{margin-top:20px}
+.onboarding .notification-cards{grid-template-columns:1fr}
+.onboarding .notification-card{padding:16px}
+@media(max-width:1100px){.notification-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:850px){.dashboard-middle{grid-template-columns:1fr}.dashboard-middle .account-summary{grid-column:auto}}
+@media(max-width:600px){.notification-cards{grid-template-columns:1fr}.chart-area{padding:0 14px 16px}.chart-toolbar{gap:8px}.chart-toolbar>b,.chart-total b{font-size:14px}.chart-picker select{max-width:160px}.notification-card{padding:20px}}

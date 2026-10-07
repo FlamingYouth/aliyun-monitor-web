@@ -10,6 +10,7 @@ setup.token
 .aws/
 .codex/
 .agents/
+.private/
 
 # Runtime databases, logs, and sensitive backups
 data/

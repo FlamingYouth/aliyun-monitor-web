@@ -1,4 +1,4 @@
-"""Fail closed unless a candidate matches the already-tested 1.1.0 image content.
+"""Fail closed unless a candidate matches the already-tested 1.2.0 image content.
 
 Run inside the candidate with only this script and the public baseline mounted.
 No application source override, real data volume, credentials or cloud calls.
@@ -13,7 +13,7 @@ import sys
 
 
 def verify(baseline, architecture):
-    if baseline.get("version") != "1.1.0":
+    if baseline.get("version") != "1.2.0":
         raise ValueError("Unexpected release baseline")
     expected_files = baseline["files"]
     root = Path("/app")

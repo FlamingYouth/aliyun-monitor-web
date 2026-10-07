@@ -4,6 +4,7 @@ import threading
 import time
 import uuid
 from zoneinfo import ZoneInfo
+from notify import CHANNELS
 
 
 class BusyError(Exception):
@@ -19,7 +20,7 @@ class Engine:
     def notify(self, message):
         settings = self.store.settings(True)
         result = {}
-        for channel in ("wecom", "bark"):
+        for channel in CHANNELS:
             if settings[channel + "_enabled"]:
                 try:
                     self.notifier.send(channel, settings, self.store.redact(message, limit=None))
@@ -206,6 +207,7 @@ class Engine:
                     lines.append(f"{'余额' if key == 'balance' else '账单'}：查询失败")
                     self.store.event("warning", "report", f"{account['name']} {key} 查询失败：{error}")
             self.store.put("accounts", data)
+            self.refresh_daily_bills(account, data, now, errors)
             lines.append("")
         for item in self.store.rows("instances"):
             lines.append(f"{item['name']} · {item['instance_id']}\n状态：{'已暂停' if item['paused'] else item.get('status', '未巡检')}\n"
@@ -213,8 +215,29 @@ class Engine:
                          f"{'巡检异常：' + item['error'] if item.get('error') else ''}")
         report = self.store.redact("\n".join(lines), limit=None)
         result = self.notify(report)
-        self.store.set_meta("last_report", {"at": time.time(), "content": report, "delivery": result})
+        self.store.save_report(report, result)
         return {"content": report, "delivery": result, "errors": errors}
+
+    def refresh_daily_bills(self, account, data, now, errors):
+        month = now.strftime("%Y-%m")
+        cached = {bill["day"]: bill for bill in self.store.daily_bills(account["id"], month)}
+        try:
+            # Include today's provisional bill. Empty billing responses today
+            # mean not issued yet, so preserve an existing/manual amount.
+            for number in range(1, now.day + 1):
+                day = f"{month}-{number:02d}"
+                if day in cached and number < now.day - 3:
+                    continue
+                bill = self.cloud.daily_bill(account, day)
+                if number == now.day and bill.get("has_entries") is False:
+                    continue
+                self.store.save_daily_bill(account["id"], day, bill)
+            data.pop("daily_bill_error", None)
+        except Exception as error:
+            data["daily_bill_error"] = "每日账单查询失败，请检查 QueryAccountBill 读取权限或稍后重试"
+            errors.append(f"{account['name']}：每日账单查询失败")
+            self.store.event("warning", "report", f"{account['name']} 每日账单查询失败：{error}")
+        self.store.put("accounts", data)
 
     def launch(self, kind, background=True):
         if kind not in ("check", "report"):
@@ -222,8 +245,13 @@ class Engine:
         if not self.lock.acquire(blocking=False):
             raise BusyError("已有任务运行中，请等待完成")
         job_id = uuid.uuid4().hex
-        with self.store.db() as db:
-            db.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?)", (job_id, kind, "running", time.time(), None, None))
+        try:
+            with self.store.db() as db:
+                db.execute("INSERT INTO jobs VALUES (?,?,?,?,?,?)", (job_id, kind, "running", time.time(), None, None))
+            self.store.prune_history()
+        except BaseException:
+            self.lock.release()
+            raise
         def execute():
             try:
                 if kind == "report":
@@ -240,10 +268,12 @@ class Engine:
                 status, result = "failed", {"error": self.store.redact(error)}
                 self.store.event("error", "task", f"任务失败：{error}")
             finally:
-                with self.store.db() as db:
-                    db.execute("UPDATE jobs SET status=?,finished=?,result=? WHERE id=?", (status, time.time(), json.dumps(result, ensure_ascii=False), job_id))
-                    db.execute("DELETE FROM jobs WHERE id NOT IN (SELECT id FROM jobs ORDER BY at DESC LIMIT 200)")
-                self.lock.release()
+                try:
+                    with self.store.db() as db:
+                        db.execute("UPDATE jobs SET status=?,finished=?,result=? WHERE id=?", (status, time.time(), json.dumps(result, ensure_ascii=False), job_id))
+                    self.store.prune_history()
+                finally:
+                    self.lock.release()
         if background:
             threading.Thread(target=execute, daemon=True, name="monitor-job").start()
         else:
@@ -253,6 +283,7 @@ class Engine:
     def schedule(self):
         while not self.stop.wait(5):
             try:
+                self.store.prune_history()
                 if not self.store.meta("admin"):
                     continue
                 settings = self.store.settings()

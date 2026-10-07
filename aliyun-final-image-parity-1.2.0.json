@@ -1,0 +1,58 @@
+{
+  "version": "1.2.0",
+  "application_files_equal": true,
+  "dependencies_equal": true,
+  "python_equal": true,
+  "runtime_config_equal": true,
+  "images": [
+    {
+      "tag": "aliyun-monitor-web:1.2.0-amd64",
+      "id": "sha256:9e97b62327818385b2086e43f953c37de44befb6f3d1ab16144327d3c7896d27",
+      "architecture": "amd64",
+      "python": "3.12.14"
+    },
+    {
+      "tag": "aliyun-monitor-web:1.2.0-arm64",
+      "id": "sha256:683cee0dcdf3ecf76f568908de2c1c69db1fff36673363c4111600fe4d63f9d5",
+      "architecture": "arm64",
+      "python": "3.12.14"
+    }
+  ],
+  "files": {
+    "admin_reset.py": "addc62ccbd8326db6eaff367e620040e36a4d7d8d59704abe9ed2ba8666e46cc",
+    "app.py": "7ffba833778c60a630feb505abe48ea85004d36df9d884d92d46093d4e40be4e",
+    "cloud.py": "e8e885be3af8d8c464a9b440da4666d1291d40baddec3cc7d6d68883a57d1868",
+    "engine.py": "739180a6858f7196210b5ca8f2ef2d976fd3bcbaddc4d4d90905d2088e3251cb",
+    "notification-config.json": "4b9d73a7c649c55bfdd2dd0caf23c4ebe1930788d342928547922df55ce3910e",
+    "notify.py": "d1ce2ac5b3d11ef11fe3c8cf9cebf0710457a9d42346652708350b9ea48e9a25",
+    "requirements.txt": "8266b7f0ce3c6e8b80d3ff7625afd1e13fdcc124c3ef20c5dae1b7966115e847",
+    "static/app.js": "5fc414acdc2ccb418c55b4f3b22438ee1fcb890c16bde0c1eee2bb9ccfd71709",
+    "static/extras.css": "eb7f9610a43950cd439a3b54a7809e7a488819bc00211619fcbeab23aae6599d",
+    "static/index.html": "2313348df1d1bc2784a2b819aaf2ee1c228ae864e0a45f6117a40f2bf34f63b1",
+    "static/style.css": "d3b146f2d13a73c20cff0412ace44ee59736462e25d87bf0e27ec836cdba09aa",
+    "store.py": "66873ec4eb8d42cf5de9e1ced98f6cb03ecade16c2ffc480a162f5a9671f3fa9"
+  },
+  "packages": {
+    "Flask": "3.1.2",
+    "Jinja2": "3.1.6",
+    "MarkupSafe": "3.0.3",
+    "PySocks": "1.7.1",
+    "Werkzeug": "3.1.9",
+    "aliyun-python-sdk-core": "2.16.1",
+    "blinker": "1.9.0",
+    "certifi": "2026.7.22",
+    "cffi": "2.1.1",
+    "charset-normalizer": "3.5.2",
+    "click": "8.5.0",
+    "cryptography": "45.0.7",
+    "gunicorn": "23.0.0",
+    "idna": "3.20",
+    "itsdangerous": "2.2.0",
+    "jmespath": "1.1.0",
+    "packaging": "26.3",
+    "pip": "25.0.1",
+    "pycparser": "3.0",
+    "requests": "2.32.5",
+    "urllib3": "2.8.0"
+  }
+}

@@ -1,4 +1,4 @@
-name: Verify and publish container 1.1.0
+name: Verify and publish container 1.2.0
 
 # Explicit manual release only: normal pushes do not publish images.
 "on":
@@ -8,12 +8,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: publish-container-1.1.0
+  group: publish-container-1.2.0
   cancel-in-progress: false
 
 env:
   IMAGE: ghcr.io/flamingyouth/aliyun-monitor
-  VERSION: 1.1.0
+  VERSION: "1.2.0"
 
 jobs:
   verify:
@@ -55,7 +55,7 @@ jobs:
           docker run --rm --network none --read-only --cap-drop ALL \
             --security-opt no-new-privileges:true \
             --mount "type=bind,src=$PWD/scripts,dst=/verification,readonly" \
-            --mount "type=bind,src=$PWD/aliyun-final-image-parity-1.1.0.json,dst=/baseline.json,readonly" \
+            --mount "type=bind,src=$PWD/aliyun-final-image-parity-1.2.0.json,dst=/baseline.json,readonly" \
             "candidate:$ARCH" python /verification/verify_image.py \
             --baseline /baseline.json --architecture "$ARCH"
           docker run --rm --network none --read-only "candidate:$ARCH" python -m pip check
@@ -178,7 +178,7 @@ jobs:
           print('Published multi-architecture manifest verified:', platforms)
           PY
           {
-            echo '## Published verified 1.1.0 container'
+            echo '## Published verified 1.2.0 container'
             echo "Image: \`$IMAGE:$VERSION\`"
             echo 'Architectures: linux/amd64 and linux/arm64'
             echo 'Both candidates passed baseline, unit, frontend and HTTP checks before any push.'

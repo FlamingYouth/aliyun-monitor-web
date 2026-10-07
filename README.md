@@ -1,6 +1,66 @@
-# 云巡 · 阿里云监控 Docker 网页版
+# 云巡 1.2.0 · 阿里云监控网页版（Docker / Python）
 
-把原来的 `config.json`、监控脚本和企业微信通知配置，改为一个简体中文工作台。一个管理员，可以管理多个阿里云账号、多台 ECS 实例；核心配置必填，企业微信和 Bark 均可选。默认只监控，不自动启停。
+把原来的 `config.json`、监控脚本和企业微信通知配置，改为一个简体中文工作台。一个管理员，可以管理多个阿里云账号、多台 ECS 实例；核心配置必填，企业微信、Bark 和 Telegram 均可选，可以同时启用。默认只监控，不自动启停。
+
+## 1.2.0 更新：总览、通知与记录
+
+- 总览折线图显示账号每日新增 CDT 流量：当日最新的本月累计用量减去前一日累计用量，月初 1 日以当日累计为准；右上方显示本月累计用量。今天的日流量随巡检更新，纵轴按每日流量最高值显示，同账号实例的采样去重。缺少前一日采样或累计值回落时，该日等待完整采样，不把多日用量计入单日；缺失日期之间不连线。可以选择账号，实例详情仍保留最近 144 次原始采样。
+- 新增“本月账号账单”每日费用柱状图。月度总额沿用原来的 `QueryBillOverview` / `PretaxAmount`；每日费用使用 `QueryAccountBill` 的 `DAILY` 粒度和相同金额字段，按账号与币种分别展示，不通过月度累计差额推算。网页账单金额直接截取两位小数，柱高、数值和悬停提示使用一致的截取金额；数据库保留原始金额。
+- 日账单在生成日报时补齐本月日期，重新查询今天及之前三天。有有效账单时更新今天的费用，今天未出账时保留已有数据；查询失败或尚未查询的日期显示灰色，已查询的零费用与未知费用区分显示。需要额外的 `bss:QueryAccountBill` 读取权限。阿里云账单可能延迟约 24 小时，当月数据也可能后续调整。[阿里云日账单 API](https://help.aliyun.com/zh/user-center/developer-reference/api-bssopenapi-2017-12-14-queryaccountbill)
+- 企业微信、Bark、Telegram 各自显示卡片；外层可开关并查看基本信息，编辑弹窗内填写配置和测试发送。多渠道分别发送，某个渠道失败不会阻止其他渠道。
+- 最近任务在数据库和页面中只保留最新 3 条。日报独立保存，按配置时区保留当前自然月，每天保存一份最新日报；每月 1 日自动清理上个月内容，任务只保留 3 条不会影响本月日报历史。
+
+本次验证记录见 [TEST_REPORT_20261007.md](TEST_REPORT_20261007.md)：81 项后端测试、前端回归、镜像内网站启动和 HTTP 检查通过；本机功能验收还覆盖桌面/手机页面及真实 Telegram 私聊发送。1.2.0 使用新的双架构内容校验基线 `aliyun-final-image-parity-1.2.0.json`；`TEST_REPORT.md` 和 1.1.0 基线仅保留为历史记录。
+
+## Docker 镜像升级至 1.2.0
+
+可从两个镜像源获取 1.2.0：
+
+| 镜像源 | 地址 | 架构 |
+| --- | --- | --- |
+| 阿里云仓库 | `registry.cn-hangzhou.aliyuncs.com/bigbey/aliyun-monitor:1.2.0` | Linux AMD64 |
+| GitHub Packages | `ghcr.io/flamingyouth/aliyun-monitor:1.2.0` | Linux AMD64 / ARM64 |
+
+```sh
+docker pull registry.cn-hangzhou.aliyuncs.com/bigbey/aliyun-monitor:1.2.0
+# 或使用 GitHub 镜像源，自动选择服务器架构
+docker pull ghcr.io/flamingyouth/aliyun-monitor:1.2.0
+```
+
+先下载完整备份，再将原部署的镜像地址改为上述版本并重新创建应用容器。沿用原来的端口、环境变量以及挂载到 `/data` 的数据卷或目录；保留 `monitor.db` 和 `secret.key`，程序自动补齐历史表。不要重新创建数据卷。1.2.0 接受 1.0.0、1.1.0 及此前版本标记的旧备份，现有账号和登录信息可以继续使用。
+
+Docker 中 Telegram 代理必须填写容器能够访问的地址。可在网页中保存代理，也可挂载 `notification-config.json` 并通过 `NOTIFICATION_CONFIG` 指定文件；网页已保存的代理优先。`127.0.0.1` 指容器本身，代理运行在宿主机时应填写容器可访问的宿主机地址。
+
+## Python 直接部署与升级
+
+继续支持直接运行 Python，无需改为 Docker。建议使用 Python 3.12 和独立虚拟环境：
+
+```sh
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements.txt
+DATA_DIR="$PWD/data" python app.py
+```
+
+打开 `http://127.0.0.1:8080`，按网页向导配置。初始化口令保存在数据目录的 `setup.token`。升级已有部署时，先备份并停止原进程，更新源码与依赖，然后使用**原来的 DATA_DIR** 启动；保留原有 `monitor.db`、`secret.key` 和 `setup.token`，账号、密码和通知配置会沿用。程序自动补齐新数据表，并保留本月原有的最新日报。
+
+## Telegram 与代理配置文件
+
+通知页面编辑 Telegram，填写 BotFather 提供的 Bot Token 和接收者的数字 Chat ID。私聊接收者需先向该机器人发送 `/start`；个人 `@用户名` 不能代替数字 Chat ID。Token 加密保存，页面、普通导出与日志不回显 Token。
+
+项目自带 `notification-config.json`，代理默认写为：
+
+```json
+{
+  "telegram_proxy": "socks5h://127.0.0.1:7897"
+}
+```
+
+`socks5h` 通过代理解析 Telegram 域名。也支持 `socks5://`、`http://` 和 `https://` 代理，设为空字符串表示直连。新增的 PySocks 依赖已包含在 `requirements.txt`，Python 部署升级时需重新安装依赖。[Requests 的 SOCKS 说明](https://requests.readthedocs.io/en/latest/user/advanced/#socks)
+
+未在网页中覆盖代理时，默认值来自该文件；也可以用 `NOTIFICATION_CONFIG` 指定另一份配置文件，或用 `TELEGRAM_PROXY` 提供环境默认值。改文件后重启程序生效。网页编辑代理并保存后，网页配置优先；网页里清空代理表示直连。代理只用于 Telegram，不改变阿里云、企业微信或 Bark 的连接。
+
+Python 部署中的 `127.0.0.1` 指运行 Python 的服务器，所以该服务器上必须有可用代理。本机 Docker Desktop 测试时应使用 `socks5h://host.docker.internal:7897` 访问宿主机代理，不能在容器里将 `127.0.0.1` 当作宿主机。[Docker 网络说明](https://docs.docker.com/desktop/features/networking/)
 
 ## 一、先看这几条
 
@@ -8,7 +68,7 @@
 - 安装向导只创建本应用容器和数据卷，不修改宿主机 Python、不改防火墙、不停止其他容器或原脚本。
 - 首次构建需要访问 Docker Hub 和 PyPI。中国大陆网络可能需要你已有的合规镜像源；向导不会自动改 Docker 配置。
 - CentOS 7 已于 2024-06-30 结束维护。容器不是宿主机安全更新的替代品，建议规划升级。[CentOS 官方公告](https://www.centos.org/centos-linux-eol/)
-- 已在本地 Docker 20.10.16 / Linux 容器测试。不是在你的真实 CentOS 7 服务器内测试，不保证所有历史内核和 Docker 发行版均兼容；详见 `TEST_REPORT.md`。
+- 已在本地 Docker 20.10.16 / Linux 容器测试。不是在你的真实 CentOS 7 服务器内测试，不保证所有历史内核和 Docker 发行版均兼容；详见 `TEST_REPORT_20261007.md`。
 
 ## 二、一步一步部署
 
@@ -20,12 +80,12 @@ cd aliyun-monitor-web
 sh install.sh
 ```
 
-仓库不含真实密钥、通知地址、运行数据或 `.env`；安装时生成私有初始化口令，阿里云参数和管理员密码由你在网页中填写。测试目录中的凭据均为明确标注的虚构数据，不是正式部署的默认密码。`TEST_REPORT.md` 和 `aliyun-final-image-parity-1.1.0.json` 记录本次双架构验证结果。
+仓库不含真实密钥、通知地址、运行数据或 `.env`；安装时生成私有初始化口令，阿里云参数和管理员密码由你在网页中填写。测试目录中的凭据均为明确标注的虚构数据，不是正式部署的默认密码。本次验证记录和公开校验文件为 `TEST_REPORT_20261007.md`、`aliyun-final-image-parity-1.2.0.json`。
 
-将 `aliyun-monitor-web-1.1.0.tar.gz` 上传到 CentOS 7，例如 `/opt`，执行：
+将 `aliyun-monitor-web-20261007.tar.gz` 上传到 CentOS 7，例如 `/opt`，执行：
 
 ```sh
-tar -xzf aliyun-monitor-web-1.1.0.tar.gz
+tar -xzf aliyun-monitor-web-20261007.tar.gz
 cd aliyun-monitor-web
 sh install.sh
 ```
@@ -69,6 +129,7 @@ docker exec aliyun-monitor-web python -c "from pathlib import Path; print(Path('
 | 账号 CDT 累积流量 | `cdt:ListCdtInternetTraffic` |
 | ECS 状态/区域内实例发现 | `ecs:DescribeInstances` |
 | 余额/本月账号账单 | `bssapi:QueryAccountBalance`、`bssapi:QueryBillOverview` |
+| 每日账号账单柱状图 | `QueryAccountBill`（RAM 动作 `bss:QueryAccountBill`） |
 | 手动启停或启用自动控制需要 | `ecs:StopInstance`、`ecs:StartInstance` |
 
 RAM 支持的资源粒度及条件请以阿里云对应服务当前权限说明为准。界面的“测试权限”只检查读取；不会为了测试启停权限而实际关机。缺少启停权限时真实动作会失败并记入事件日志。
@@ -77,7 +138,7 @@ RAM 支持的资源粒度及条件请以阿里云对应服务当前权限说明�
 
 账单为当前月份账号汇总，余额/账单随日报任务刷新；没有查询结果时显示“待查询”，不会误显示 0。数据来自云 API，存在延迟；本系统不是计费上限保证。没有 CDT 数据或 API 权限异常时会停用这一轮自动决策，不能把查询失败当作 0 GB。
 
-## 四、手动启停与有条件恢复（1.1.0）
+## 四、手动启停与有条件恢复
 
 - 总览、监控实例和实例详情都有“开机 / 普通关机”。需要登录、确认目标并输入完整 ECS 实例 ID；不能只点一次就关机。手动按钮是明确的真实操作，**不受“只监控”或“暂停自动监控”拦截**；自动任务仍受这些开关限制。
 - 所有程序关机（手动或自动止损）都明确发送 `StopInstance` + `StoppedMode=KeepCharging` + `ForceStop=false`：普通、非强制停机，保留资源并继续计费，不做节省停机。程序仅允许 `StartInstance` / `StopInstance`，没有删除实例、删除云盘或创建替代实例的调用。[阿里云 StopInstance 参数说明](https://help.aliyun.com/zh/ecs/developer-reference/api-ecs-2014-05-26-stopinstance)
@@ -116,7 +177,7 @@ Bark 是 iPhone 通知服务，不是必需项；支持设备密钥形式的公�
 
 网页普通配置导出不包含账号密钥或通知地址，只供查看策略，不能直接当完整备份导入。
 
-完整备份需再次输入管理员密码，包含数据库与解密密钥，请作为敏感文件离线保管。恢复接受 1.0.0 或 1.1.0 导出的三文件 ZIP，会校验数据库和密钥，覆盖当前数据并退出全部会话。恢复前副本保留在数据卷 `before-restore/`，再次恢复会覆盖上次的恢复前副本。恢复后使用备份中的管理员密码登录。
+完整备份需再次输入管理员密码，包含数据库与解密密钥，请作为敏感文件离线保管。1.2.0 恢复接受 1.0.0、1.1.0 和 1.2.0 的三文件 ZIP，也兼容此前部署使用的 1.10、1.20 版本标记，会校验数据库和密钥，覆盖当前数据并退出全部会话。恢复前副本保留在数据卷 `before-restore/`，再次恢复会覆盖上次的恢复前副本。恢复后使用备份中的管理员密码登录。
 
 忘记密码，通过服务器上的交互命令重置，不将密码放在命令参数或日志中：
 
@@ -137,7 +198,7 @@ docker start aliyun-monitor-web
 安装向导不会覆盖已有容器或 `.env`。若首次构建因网络失败，确认 `.env` 是本应用这次生成的，再按以下方式继续（不要重写其口令）：
 
 ```sh
-docker build -t aliyun-monitor-web:1.1.0 .
+docker build -t aliyun-monitor-web:1.2.0 .
 docker volume create aliyun-monitor-web-data
 # 如果有 Compose：
 docker compose -f compose.yaml up -d
@@ -151,7 +212,7 @@ docker run -d --name aliyun-monitor-web --restart unless-stopped \
   --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m \
   --cap-drop ALL --security-opt no-new-privileges:true --memory 512m \
   --env-file .env -p 127.0.0.1:8088:8080 \
-  -v aliyun-monitor-web-data:/data aliyun-monitor-web:1.1.0
+  -v aliyun-monitor-web-data:/data aliyun-monitor-web:1.2.0
 ```
 
 不要删除 `aliyun-monitor-web-data` 数据卷。重建容器应先完成完整备份并停用旧容器；不必重建数据卷。向导没有一键卸载或自动删除数据的功能。
@@ -163,10 +224,10 @@ docker run -d --name aliyun-monitor-web --restart unless-stopped \
 只使用伪造测试数据，不访问真实云资源、不发送真实通知：
 
 ```sh
-docker build -t aliyun-monitor-web:1.1.0 .
+docker build -t aliyun-monitor-web:1.2.0 .
 docker run --rm --network none --tmpfs /tmp:rw,size=128m \
-  -v "$PWD:/app:ro" aliyun-monitor-web:1.1.0 \
-  python -m unittest discover -s tests -v
+  -v "$PWD/tests:/app/tests:ro" -v "$PWD/install.sh:/app/install.sh:ro" \
+  aliyun-monitor-web:1.2.0 python -m unittest discover -s tests -v
 ```
 
 `tests/preview.py` 只用于开发预览，Dockerfile 不会将它复制进生产镜像。生产程序没有“伪造云数据”的环境变量开关。部署后请使用向导中的读取测试和真实通知测试完成你自己账号的最终验收。
@@ -175,18 +236,16 @@ docker run --rm --network none --tmpfs /tmp:rw,size=128m \
 
 ## 十、镜像架构与升级
 
-本次镜像为 `codex-aliyun-monitor-final-arm64:1.1.0`（本地 Mac）和 `codex-aliyun-monitor-final-amd64:1.1.0`（常见 x86_64 服务器）。两版应用文件及依赖版本做过一致性核对，镜像 ID 不同是架构差异，详见测试报告和校验文件。请用 1.1.0 新标签，不要把旧 1.0.0 当作这次更新。
+GitHub 镜像 `ghcr.io/flamingyouth/aliyun-monitor:1.2.0` 同时支持 AMD64 和 ARM64，Docker 自动选择匹配架构。阿里云正式镜像 `registry.cn-hangzhou.aliyuncs.com/bigbey/aliyun-monitor:1.2.0` 为 AMD64，与原正式部署一致。两个镜像源的应用代码和固定依赖版本通过同一份 1.2.0 校验基线核对；平台和发布元数据不同会产生不同的镜像摘要。
 
-上传 Docker Hub 时把对应镜像重新标记到你自己的仓库再推送；此交付没有替你登录或上传。服务器使用匹配架构的镜像，保留原数据卷、端口和安全参数。不要同时启动两个监控容器共享同一数据卷。
-
-升级前下载完整备份，停用旧容器；先设为只监控再启动新版。管理员与原配置不需要重新创建，新增抢占恢复选项默认关闭。若要回退镜像，务必保持只监控，确认数据兼容性后再重新启用自动控制。
+升级前下载完整备份，停用旧容器；新容器沿用原数据卷、端口、环境变量和代理配置，管理员及账号配置不需要重新创建。程序自动补齐新数据表，并支持旧版完整备份。保持单个调度进程，避免多份程序同时控制同一实例。
 
 ## 十一、GitHub Packages 发布
 
-仓库新增手动发布流程 `Verify and publish container 1.1.0`，目标为 `ghcr.io/flamingyouth/aliyun-monitor:1.1.0`。它不在普通代码提交时自动运行，也不需要保存个人 Token。只在发布阶段使用仓库临时 `GITHUB_TOKEN` 的 Packages 写入权限。
+手动发布流程 `Verify and publish container 1.2.0` 发布 `ghcr.io/flamingyouth/aliyun-monitor:1.2.0`。普通代码提交不会自动发布镜像；流程只在发布阶段使用仓库临时 `GITHUB_TOKEN` 的 Packages 写入权限，不保存个人 Token。
 
-发布前分别在原生 AMD64、ARM64 环境构建候选镜像：11 个应用文件、20 个依赖版本及 Python 版本必须与已有 1.1.0 测试基线一致；两版均通过完整单元测试、前端回归和镜像内真实 HTTP 测试，才发布已测试的候选镜像，不在发布阶段重新构建。测试只使用虚构数据且断网，不使用实际账号、Webhook、管理员配置或运行数据卷。已有版本标签不会被覆盖。
+流程在原生 AMD64、ARM64 环境分别构建候选镜像，核对 12 个应用文件、20 个固定依赖及 Python 版本是否与 `aliyun-final-image-parity-1.2.0.json` 一致。两版都通过完整单元测试、前端回归和镜像内 HTTP 检查后，发布同一批已测试镜像，不在发布阶段重新构建。自动测试断网且只使用虚构账号，不挂载实际部署的数据卷。
 
-公共版本统一使用 `1.1.0` 标签，Docker 根据机器架构选择 AMD64 或 ARM64；也保留 `1.1.0-amd64`、`1.1.0-arm64` 标签。通过镜像 source 标签关联本仓库，使包显示在右侧 Packages。新包默认为私有，拥有者需要在 Package settings 中改为 Public，其他人才能免登录拉取；公开后不能改回私有。[GitHub 官方说明](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility)
+统一版本标签为 `1.2.0`，另提供 `1.2.0-amd64`、`1.2.0-arm64`。镜像 source 标签关联本仓库，使镜像包显示在仓库的 Packages 区域。已有版本标签保持原样。
 
-此流程不操作阿里云镜像仓库，不修改任何正在运行的容器或部署配置。已有阿里云镜像地址继续有效；切换镜像源并非必需，已有部署不需要重新初始化或更换数据卷。后续应用版本变化时，需要重新完成对应版本验收并建立新基线，不能复用 1.1.0 的校验结果。
+仓库、源码发布包和镜像均不包含实际 AccessKey、Bot Token、私有通知地址、数据库、解密密钥或完整备份。运行数据、私有配置和备份目录受 Git 忽略规则保护；版本发布包仅包含可公开的源代码和说明。

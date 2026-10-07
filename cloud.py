@@ -98,3 +98,38 @@ class Cloud:
         if not result.get("RequestId"):
             raise ValueError("启停请求缺少阿里云确认标识，不能确认操作成功")
         return result
+
+    def daily_bill(self, account, day):
+        endpoint = "business.aliyuncs.com" if account["site"] == "china" else "business.ap-southeast-1.aliyuncs.com"
+        amount, currency = 0.0, "CNY" if account["site"] == "china" else "USD"
+        observed_currency = None
+        has_entries = False
+        for page in range(1, 101):
+            result = self.request(account, "cn-hangzhou", endpoint, "2017-12-14", "QueryAccountBill",
+                                  {"BillingCycle": day[:7], "Granularity": "DAILY", "BillingDate": day,
+                                   "PageSize": 300, "PageNum": page})
+            if result.get("Success") is not True:
+                raise ValueError("每日账单查询失败或 RAM 缺少 QueryAccountBill 权限")
+            data = result.get("Data")
+            if not isinstance(data, dict) or not isinstance(data.get("Items", {}).get("Item"), list):
+                raise ValueError("每日账单数据不完整")
+            items = data["Items"]["Item"]
+            has_entries = has_entries or bool(items)
+            for item in items:
+                value = float(item["PretaxAmount"])
+                if not math.isfinite(value):
+                    raise ValueError("每日账单金额无效")
+                current_currency = item.get("Currency") or currency
+                if observed_currency and observed_currency != current_currency:
+                    raise ValueError("每日账单返回多个币种，无法直接汇总")
+                observed_currency = currency = current_currency
+                amount += value
+            if len(items) < 300:
+                if page * 300 < int(data.get("TotalCount", len(items))):
+                    raise ValueError("每日账单分页数据不完整")
+                break
+        else:
+            raise ValueError("每日账单超过查询上限，未保存不完整金额")
+        if not math.isfinite(amount):
+            raise ValueError("每日账单金额无效")
+        return {"amount": amount, "currency": currency, "scope": "account", "has_entries": has_entries}

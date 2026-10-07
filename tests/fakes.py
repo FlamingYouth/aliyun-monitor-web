@@ -46,6 +46,10 @@ class FakeCloud:
         if self.bill_error: raise self.bill_error
         return {'amount': 39.80, 'currency': 'CNY', 'scope': 'account'}
 
+    def daily_bill(self, account, day):
+        if self.bill_error: raise self.bill_error
+        return {'amount': 3.98, 'currency': 'CNY', 'scope': 'account'}
+
     def discover(self, account, region, resgroup=''):
         return [{'instance_id': 'i-test002', 'name': '备用节点', 'status': 'Stopped'}]
 

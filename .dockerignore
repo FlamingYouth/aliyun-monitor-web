@@ -1,4 +1,17 @@
 .env
+.env.*
+config.json
+secret.key
+setup.token
+*.key
+*.pem
+.private
+.aws
+.codex
+.agents
+backups
+before-restore
+before-upgrade-*
 .git
 __pycache__
 *.pyc

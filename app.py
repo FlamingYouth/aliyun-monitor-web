@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from datetime import datetime
 import hashlib
 import hmac
 import io
@@ -24,10 +25,10 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from cloud import Cloud
 from engine import BusyError, Engine
-from notify import Notifier, validate_url
-from store import Store, DEFAULTS
+from notify import CHANNELS, Notifier, validate_url, validate_proxy, validate_telegram
+from store import Store, DEFAULTS, SECRET_SETTINGS
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 
 def required(value, label, maximum=200):
@@ -106,7 +107,7 @@ def validate_instance(data, accounts, existing=None):
 def validate_settings(data, store):
     old = store.settings(True)
     out = {**old, **{key: value for key, value in data.items() if key in DEFAULTS or key == "scheduler_enabled"}}
-    for key in ("wecom_enabled", "bark_enabled", "mention_all", "dry_run", "scheduler_enabled"):
+    for key in ("wecom_enabled", "bark_enabled", "telegram_enabled", "mention_all", "dry_run", "scheduler_enabled"):
         out[key] = bool_field(out, key, True if key in ("dry_run", "scheduler_enabled") else False)
     interval = positive(out["interval"], "巡检间隔", 60, 3600)
     if interval != int(interval):
@@ -129,7 +130,45 @@ def validate_settings(data, store):
             validate_url(channel, value)
         out[key] = store.seal(value)
         out.pop(key + "_configured", None)
+    token = data.get("telegram_token") or old["telegram_token"]
+    if data.get("telegram_clear"):
+        token = ""
+    chat_id = str(out.get("telegram_chat_id", "")).strip()
+    proxy = out.get("telegram_proxy")
+    proxy = old["telegram_proxy"] if proxy is None else proxy
+    validate_proxy(proxy)
+    if out["telegram_enabled"] or token:
+        validate_telegram(token, chat_id, proxy)
+    out["telegram_token"] = store.seal(token)
+    out["telegram_chat_id"] = chat_id
+    # An unset web override continues to follow the configuration file.
+    out["telegram_proxy"] = proxy if "telegram_proxy" in data else store.meta("settings", {}).get("telegram_proxy")
     return out
+
+
+def notification_test_settings(body, store):
+    channel = body.get("channel", "wecom")
+    if channel not in CHANNELS:
+        raise ValueError("未知通知渠道")
+    settings = store.settings(True)
+    if channel == "telegram":
+        settings["telegram_token"] = body.get("token") or settings["telegram_token"]
+        settings["telegram_chat_id"] = str(body.get("chat_id", settings["telegram_chat_id"])).strip()
+        settings["telegram_proxy"] = body.get("proxy", settings["telegram_proxy"])
+        validate_telegram(settings["telegram_token"], settings["telegram_chat_id"], settings["telegram_proxy"])
+    else:
+        settings[channel + "_url"] = body.get("url") or settings[channel + "_url"]
+        validate_url(channel, required(settings[channel + "_url"], "通知地址", 1000))
+        settings["mention_all"] = bool_field(body, "mention_all")
+    return channel, settings
+
+
+def notification_error(error, settings, store):
+    safe = str(error)
+    for key in SECRET_SETTINGS:
+        if settings.get(key):
+            safe = safe.replace(settings[key], "[通知凭据已隐藏]")
+    return store.redact(safe)
 
 
 def create_app(data_dir=None, cloud=None, notifier=None, scheduler=True):
@@ -264,18 +303,11 @@ def create_app(data_dir=None, cloud=None, notifier=None, scheduler=True):
         body = data()
         kind = body.get("kind")
         if kind == "notification":
-            channel = body.get("channel", "wecom")
-            if channel not in ("wecom", "bark"):
-                raise ValueError("未知通知渠道")
-            url = required(body.get("url"), "通知地址", 1000)
-            validate_url(channel, url)
-            settings = store.settings(True)
-            settings[channel + "_url"] = url
-            settings["mention_all"] = bool_field(body, "mention_all")
+            channel, settings = notification_test_settings(body, store)
             try:
                 engine.notifier.send(channel, settings, "✅ 云巡初始化向导测试\n这是一条主动发送的测试消息。")
             except Exception as error:
-                raise ValueError(store.redact(str(error).replace(url, "[通知地址已隐藏]")))
+                raise ValueError(notification_error(error, settings, store))
             return jsonify(ok=True, message="推送接口已确认发送成功")
         if kind not in ("account", "instance"):
             raise ValueError("未知测试类型")
@@ -318,6 +350,7 @@ def create_app(data_dir=None, cloud=None, notifier=None, scheduler=True):
 
     @app.get("/api/state")
     def state():
+        store.prune_history()
         accounts = []
         for original in store.rows("accounts"):
             item = {key: value for key, value in original.items() if key not in ("ak", "sk")}
@@ -325,10 +358,11 @@ def create_app(data_dir=None, cloud=None, notifier=None, scheduler=True):
             item["ak_mask"] = ak[:3] + "••••" + ak[-3:] if len(ak) >= 8 else "••••"
             accounts.append(item)
         with store.db() as db:
-            jobs = [dict(row) for row in db.execute("SELECT id,kind,status,at,finished FROM jobs ORDER BY at DESC LIMIT 8")]
+            jobs = [dict(row) for row in db.execute("SELECT id,kind,status,at,finished FROM jobs ORDER BY at DESC,rowid DESC LIMIT 3")]
         return jsonify(accounts=accounts, instances=store.rows("instances"), settings=store.settings(),
                        events=store.events(), jobs=jobs, busy=engine.lock.locked(), last_check=store.meta("last_check"),
-                       last_report=store.meta("last_report"), username=store.meta("admin")["username"], version=VERSION,
+                       last_report=store.meta("last_report"), reports=store.reports(), report_month=store.month(),
+                       username=store.meta("admin")["username"], version=VERSION,
                        test_mode=app.config.get("TESTING", False))
 
     @app.route("/api/accounts", methods=["POST"])
@@ -417,6 +451,28 @@ def create_app(data_dir=None, cloud=None, notifier=None, scheduler=True):
     def history(item_id):
         return jsonify(samples=store.samples(item_id))
 
+    @app.get("/api/dashboard/charts")
+    def dashboard_charts():
+        store.prune_history()
+        month = store.month()
+        accounts = []
+        instances = store.rows("instances")
+        for account in store.rows("accounts"):
+            limits = [item["traffic_limit"] for item in instances if item["account_id"] == account["id"] and not item["paused"]]
+            accounts.append({"id": account["id"], "name": account["name"], "site": account["site"],
+                             "samples": store.account_daily_samples(account["id"]), "threshold": min(limits) if limits else None,
+                             "bills": store.daily_bills(account["id"], month),
+                             "bill": account.get("bill") if store.month(account.get("bill_at", 0)) == month else None,
+                             "bill_error": account.get("daily_bill_error", "")})
+        today = datetime.now(ZoneInfo(store.settings()["timezone"])).strftime("%Y-%m-%d")
+        return jsonify(month=month, today=today, accounts=accounts)
+
+    @app.get("/api/reports/<day>")
+    def report_detail(day):
+        store.prune_history()
+        report = store.report(day)
+        return jsonify(report) if report else (jsonify(error="日报不存在或已在跨月时清理"), 404)
+
     @app.route("/api/settings", methods=["PUT"])
     def settings():
         with mutation():
@@ -427,19 +483,11 @@ def create_app(data_dir=None, cloud=None, notifier=None, scheduler=True):
     @app.post("/api/notifications/test")
     def test_notification():
         body = data()
-        channel = body.get("channel", "wecom")
-        if channel not in ("wecom", "bark"):
-            raise ValueError("未知通知渠道")
-        settings = store.settings(True)
-        url = body.get("url") or settings[channel + "_url"]
-        validate_url(channel, required(url, "通知地址", 1000))
-        settings[channel + "_url"] = url
-        settings["mention_all"] = bool_field(body, "mention_all")
+        channel, settings = notification_test_settings(body, store)
         try:
             engine.notifier.send(channel, settings, "✅ 阿里云监控连接测试成功\n这是一条网页主动发送的测试消息。")
         except Exception as error:
-            safe = str(error).replace(url, "[通知地址已隐藏]")
-            raise ValueError(store.redact(safe))
+            raise ValueError(notification_error(error, settings, store))
         store.event("info", "notify", f"{channel} 测试消息发送成功")
         return jsonify(ok=True, message="推送接口已确认发送成功")
 
@@ -552,7 +600,7 @@ def create_app(data_dir=None, cloud=None, notifier=None, scheduler=True):
                     if sorted(archive.namelist()) != ["manifest.json", "monitor.db", "secret.key"] or sum(i.file_size for i in archive.infolist()) > 30 * 1024 * 1024:
                         raise ValueError("备份文件内容不符合要求")
                     manifest = json.loads(archive.read("manifest.json"))
-                    if manifest.get("format") != "aliyun-monitor-web" or manifest.get("version") not in ("1.0.0", VERSION):
+                    if manifest.get("format") != "aliyun-monitor-web" or manifest.get("version") not in ("1.0.0", "1.1.0", "1.10", "1.20", VERSION):
                         raise ValueError("备份格式或版本不匹配")
                     key = archive.read("secret.key")
                     cipher = Fernet(key)
@@ -563,7 +611,7 @@ def create_app(data_dir=None, cloud=None, notifier=None, scheduler=True):
                     if check.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                         raise ValueError("备份数据库损坏")
                     settings_row = check.execute("SELECT value FROM meta WHERE key='settings'").fetchone()
-                    for column in ("wecom_url", "bark_url"):
+                    for column in SECRET_SETTINGS:
                         secret = json.loads(settings_row[0]).get(column)
                         if secret:
                             cipher.decrypt(secret.encode())
@@ -597,6 +645,7 @@ def create_app(data_dir=None, cloud=None, notifier=None, scheduler=True):
                 os.chmod(store.root / "secret.key", 0o600)
                 os.chmod(store.path, 0o600)
                 store.cipher = cipher
+                store.upgrade_history()
             store.event("warning", "restore", "备份已恢复；所有会话退出；恢复前副本保存在数据目录 before-restore")
         response = jsonify(ok=True)
         response.delete_cookie("am_session")

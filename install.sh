@@ -3,7 +3,7 @@
 set -eu
 umask 077
 APP_NAME=aliyun-monitor-web
-APP_IMAGE=aliyun-monitor-web:1.1.0
+APP_IMAGE=aliyun-monitor-web:1.2.0
 APP_VOLUME=aliyun-monitor-web-data
 APP_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$APP_DIR"
